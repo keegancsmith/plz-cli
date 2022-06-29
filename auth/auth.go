@@ -6,12 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cli/oauth/device"
 	"github.com/pkg/browser"
 	"github.com/pkg/errors"
-	"github.com/zalando/go-keyring"
 )
 
 var ErrNoAuthCredentials = errors.New("no auth credentials")
@@ -109,7 +110,7 @@ func (a *Auth) SaveToKeyRing() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	return errors.WithStack(keyring.Set("plz", "authState", string(stateJSON)))
+	return errors.WithStack(keyringSet("plz", "authState", string(stateJSON)))
 }
 
 func loadStateFromRefreshToken(plzAPIBaseURL, refreshToken string) (*state, error) {
@@ -169,7 +170,7 @@ func fetchGitHubAppClientID(client *http.Client, plzAPIBaseURL string) (string, 
 }
 
 func loadStateFromKeyRing(plzAPIBaseURL string) (*state, error) {
-	authInfoJSON, err := keyring.Get("plz", "authState")
+	authInfoJSON, err := keyringGet("plz", "authState")
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -179,4 +180,34 @@ func loadStateFromKeyRing(plzAPIBaseURL string) (*state, error) {
 		return nil, errors.WithStack(err)
 	}
 	return &state, nil
+}
+
+func keyringPath(service, user string) (string, error) {
+	d, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	d = filepath.Join(d, ".local", "share", service)
+	err = os.MkdirAll(d, 0755)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, user), nil
+}
+
+func keyringSet(service, user, password string) error {
+	p, err := keyringPath(service, user)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(password), 0600)
+}
+
+func keyringGet(service, user string) (string, error) {
+	p, err := keyringPath(service, user)
+	if err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(p)
+	return string(b), err
 }
